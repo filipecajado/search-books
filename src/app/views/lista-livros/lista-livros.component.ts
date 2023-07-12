@@ -1,5 +1,6 @@
 import { Component, OnDestroy } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { FormControl } from '@angular/forms';
+import { EMPTY, Subscription, catchError, debounceTime, distinctUntilChanged, filter, map, of, switchMap, tap, throwError } from 'rxjs';
 import { Item, Livro, LivrosResultado } from 'src/app/models/interfaces';
 import { LivroVolumeInfo } from 'src/app/models/livroVolumeInfo';
 import { LivroService } from 'src/app/service/livro.service';
@@ -9,28 +10,35 @@ import { LivroService } from 'src/app/service/livro.service';
   templateUrl: './lista-livros.component.html',
   styleUrls: ['./lista-livros.component.css']
 })
-export class ListaLivrosComponent implements OnDestroy {
+export class ListaLivrosComponent  {
 
+
+  campoBusca = new FormControl()
+  mensagemErro = '';
+  livrosResultado : LivrosResultado;
   listaLivros: Livro[];
-  campoBusca: string = '';
-  subscription: Subscription;
-  livro: Livro;
-
+  
   constructor(private service: LivroService) { }
 
-  buscarLivros() {
-    this.subscription = this.service.buscar(this.campoBusca).subscribe( {
-      next: (items) => {
-        this.listaLivros = this.livrosResultadoParaLivros(items)
-      },
-      error: erro => console.error(erro),
-    }
-    );
-  }
+  livrosEncontrados$ = this.campoBusca.valueChanges
+                                      .pipe(
+                                        debounceTime(300),
+                                        filter((valorDigitado) => valorDigitado.length >= 3),
+                                        tap(() => console.log('Fluxo Inicial')),
+                                        distinctUntilChanged(),
+                                        switchMap((valorDigitado) => this.service.buscar(valorDigitado)),
+                                        map(resultado => this.livrosResultado = resultado),
+                                        map(resultado => resultado.items ?? []),
+                                        map(items =>
+                                           this.listaLivros = this.livrosResultadoParaLivros(items)),
+                                        catchError((erro) => {
+                                          // this.mensagemErro = 'ops, erro aqui, Recarregue a aplicação'
+                                          // return EMPTY
+                                          console.log(erro)
+                                          return throwError(() => new Error(this.mensagemErro = 'ops, erro aqui, Recarregue a aplicação'))
+                                          })
+                                          )
 
-  ngOnDestroy(){
-    this.subscription.unsubscribe()
-  }
 
   livrosResultadoParaLivros(items: Item[]): LivroVolumeInfo[]{
     return items.map(item => {
